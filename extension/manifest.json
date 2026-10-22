@@ -1,0 +1,17 @@
+{
+  "manifest_version": 3,
+  "name": "Phone Type Remote",
+  "version": "1.1.0",
+  "description": "Type text sent from your phone with controllable pacing and scan a QR to open the controller.",
+  "minimum_chrome_version": "116",
+  "permissions": ["storage", "tabs"],
+  "host_permissions": ["http://127.0.0.1/*"],
+  "background": {"service_worker": "background.js"},
+  "action": {"default_title": "Phone Type Remote", "default_popup": "popup.html"},
+  "content_scripts": [{
+    "matches": ["http://*/*", "https://*/*"],
+    "js": ["typing-utils.js", "content.js"],
+    "all_frames": true,
+    "run_at": "document_idle"
+  }]
+}
