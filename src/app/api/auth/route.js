@@ -58,6 +58,8 @@ export async function POST(request) {
         savedAddresses: address ? [address] : [],
       };
 
+
+
       return NextResponse.json({
         success: true,
         message: 'Account created! (Local session)',
