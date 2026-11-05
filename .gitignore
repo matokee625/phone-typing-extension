@@ -1,0 +1,6 @@
+# .gitignore for Quickmart Supermarket
+node_modules
+.next
+.env*.local
+*.log
+
