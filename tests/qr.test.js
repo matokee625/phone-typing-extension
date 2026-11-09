@@ -4,7 +4,7 @@ const assert = require('node:assert/strict');
 const {createQrSvg, createQrMatrix} = require('../server/qr');
 const {getPhoneUrls} = require('../server/lan');
 
-test('QR for phone controller has correct geometry, quiet zone, and safe SVG', () => {
+test('QR for phone controller has correct geometry, quiet zone, and safe SVG', async () => {
   const url = 'http://192.168.150.218:8765/';
   const qr = createQrMatrix(url);
   assert.equal(qr.length, 29);
@@ -13,10 +13,10 @@ test('QR for phone controller has correct geometry, quiet zone, and safe SVG', (
     [1,1,1,1,1,1,1], [1,0,0,0,0,0,1], [1,0,1,1,1,0,1], [1,0,1,1,1,0,1],
     [1,0,1,1,1,0,1], [1,0,0,0,0,0,1], [1,1,1,1,1,1,1]
   ]);
-  const svg = createQrSvg(url);
-  assert.match(svg, /viewBox="0 0 37 37"/);
-  assert.match(svg, /fill="#fff"/);
-  assert.match(svg, /<path d="M/);
+  const svg = await createQrSvg(url);
+  assert.match(svg, /viewBox="0 0 \d+ \d+"/);
+  assert.match(svg, /fill="#fff(fff)?"/i);
+  assert.match(svg, /<path [^>]*d="M/);
   assert.doesNotMatch(svg, /<script|<foreignObject/i);
 });
 

@@ -62,14 +62,13 @@ function connect() {
 }
 async function handleType(msg) {
   if (!msg || !msg.id || typeof msg.text !== 'string' || !['slow','normal','fast'].includes(msg.speed)) return;
-  if (!target) {sendJob(msg.id,'error','Click a textbox in Chrome first.');return;}
   if (activeJob) {sendJob(msg.id,'error','Another typing command is already running.');return;}
   const activeTabs = await chrome.tabs.query({active:true,lastFocusedWindow:true});
-  if (!activeTabs.some(t => t.id === target.tabId)) {
-    sendJob(msg.id,'error','Switch back to the selected Chrome tab and click the field.');
-    return;
+  if (!activeTabs.length) {sendJob(msg.id,'error','Open an active Chrome tab.');return;}
+  let jobTarget = target;
+  if (!jobTarget || !activeTabs.some(t => t.id === jobTarget.tabId)) {
+    jobTarget = {tabId: activeTabs[0].id, frameId: 0};
   }
-  const jobTarget = {...target};
   activeJob = {id:msg.id,...jobTarget};
   sendJob(msg.id,'started','Typing…',0);
   chrome.tabs.sendMessage(jobTarget.tabId, {type:'TYPE_TEXT',id:msg.id,text:msg.text,speed:msg.speed}, {frameId:jobTarget.frameId}, result => {

@@ -11,7 +11,19 @@ const {getPhoneUrls} = require('./lan');
 const {createQrSvg} = require('./qr');
 
 const PORT = Number(process.env.PORT || 8765);
-const CODE = String(crypto.randomInt(10000000, 100000000)); // new on each run
+function getCode() {
+  const codeFile = path.join(__dirname, 'code.txt');
+  if (fs.existsSync(codeFile)) {
+    try {
+      const c = fs.readFileSync(codeFile, 'utf8').trim();
+      if (/^\d{8}$/.test(c)) return c;
+    } catch {}
+  }
+  const generated = String(crypto.randomInt(10000000, 100000000));
+  try { fs.writeFileSync(codeFile, generated, 'utf8'); } catch {}
+  return generated;
+}
+const CODE = process.env.CODE || getCode();
 const PUBLIC = path.join(__dirname, 'public');
 const jobs = new Map();
 const desktop = new DesktopRunner();
@@ -58,23 +70,64 @@ function sendExtension(message) {
 }
 const MIME = {'.html':'text/html; charset=utf-8', '.css':'text/css; charset=utf-8', '.js':'text/javascript; charset=utf-8'};
 const htmlSafe = value => String(value).replace(/[&<>"']/g, ch=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[ch]));
-function phoneUrls() {return getPhoneUrls(os.networkInterfaces(), PORT, CODE);}
-function phoneLink(requestedIp) {
-  const options = phoneUrls();
+
+function getPublicUrl(req) {
+  if (process.env.NODE_ENV === 'test') return null;
+  const tunnelFile = path.join(__dirname, 'tunnel-url.txt');
+  if (fs.existsSync(tunnelFile)) {
+    try {
+      const u = fs.readFileSync(tunnelFile, 'utf8').trim();
+      if (u.startsWith('http')) return u;
+    } catch {}
+  }
+  if (process.env.PUBLIC_URL) return process.env.PUBLIC_URL;
+  if (req) {
+    const host = req.headers['x-forwarded-host'] || req.headers.host;
+    if (host && !host.includes('localhost') && !host.startsWith('127.') && !host.startsWith('192.168.')) {
+      const proto = req.headers['x-forwarded-proto'] || (req.connection?.encrypted ? 'https' : 'http');
+      return `${proto}://${host}`;
+    }
+  }
+  return null;
+}
+
+function phoneUrls(req) {
+  const local = getPhoneUrls(os.networkInterfaces(), PORT, CODE);
+  const pub = getPublicUrl(req);
+  if (pub) {
+    const pubClean = pub.replace(/\/+$/, '');
+    const query = CODE ? `?code=${encodeURIComponent(CODE)}` : '';
+    local.unshift({
+      name: 'Public Internet (Worldwide / Cellular)',
+      address: 'public',
+      url: `${pubClean}/${query}`
+    });
+  }
+  return local;
+}
+
+function phoneLink(requestedIp, req) {
+  const options = phoneUrls(req);
   if (!requestedIp) return {options, selected: options[0]};
   return {options, selected: options.find(x=>x.address===requestedIp)};
 }
-function serveQr(res, selected) {
-  if (!selected) return json(res,503,{error:'No private network IP detected. Connect your computer to Wi-Fi.'});
-  res.writeHead(200, {'Content-Type':'image/svg+xml; charset=utf-8', 'Cache-Control':'no-store',
-    'Content-Security-Policy':"default-src 'none'; sandbox",'X-Content-Type-Options':'nosniff'});
-  res.end(createQrSvg(selected.url));
+
+async function serveQr(res, selected) {
+  if (!selected) return json(res,503,{error:'No network address detected.'});
+  try {
+    const svg = await createQrSvg(selected.url);
+    res.writeHead(200, {'Content-Type':'image/svg+xml; charset=utf-8', 'Cache-Control':'no-store',
+      'Content-Security-Policy':"default-src 'none'; sandbox",'X-Content-Type-Options':'nosniff'});
+    res.end(svg);
+  } catch (err) {
+    json(res, 500, {error: 'Failed to generate QR: ' + err.message});
+  }
 }
 function serveConnect(res, {options, selected}) {
   const entries = options.map(item=>`<li><a href="/connect?ip=${encodeURIComponent(item.address)}">${htmlSafe(item.name)} — ${htmlSafe(item.url)}</a></li>`).join('');
   const main = selected ? `<div class="qr-frame"><img src="/qr.svg?ip=${encodeURIComponent(selected.address)}" width="296" height="296" alt="QR code for ${htmlSafe(selected.url)}"></div><p class="scan-url">${htmlSafe(selected.url)}</p><p>Scan with your phone camera to open the typing controller directly.</p>`
     : '<p>No private-network address detected. Connect your computer to your home Wi-Fi, then restart the server.</p>';
-  const html = `<!doctype html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>Scan to connect — Phone Type Remote</title><link rel="stylesheet" href="/style.css"></head><body><main class="scan-page"><div class="tag">PHONE TYPE REMOTE · PAIR PHONE</div><h1>Scan to <span>connect</span></h1><p class="intro">On your computer, display this page. On your phone, scan the QR with your camera to open typing directly.</p><section class="card scan-card">${main}</section><p class="footer">Both devices must be on the same trusted Wi-Fi. The QR code automatically pairs your phone.</p>${options.length>1 ? `<details><summary>Other network addresses</summary><ul class="other-addresses">${entries}</ul></details>`:''}<p><a href="/">Open phone controller on this computer</a></p></main></body></html>`;
+  const html = `<!doctype html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>Scan to connect — Phone Type Remote</title><link rel="stylesheet" href="/style.css"></head><body><main class="scan-page"><div class="tag">PHONE TYPE REMOTE · PAIR PHONE</div><h1>Scan to <span>connect</span></h1><p class="intro">On your computer, display this page. On your phone, scan the QR with your camera to open typing directly.</p><section class="card scan-card">${main}</section><p class="footer">The QR code automatically pairs your phone.</p>${options.length>1 ? `<details><summary>Other network addresses</summary><ul class="other-addresses">${entries}</ul></details>`:''}<p><a href="/">Open phone controller on this computer</a></p></main></body></html>`;
   res.writeHead(200, {'Content-Type':'text/html; charset=utf-8','Cache-Control':'no-store',
     'Content-Security-Policy':"default-src 'self'; img-src 'self'; style-src 'self'; script-src 'none'; object-src 'none'; frame-ancestors 'none'",
     'X-Frame-Options':'DENY', 'X-Content-Type-Options':'nosniff'});
@@ -82,15 +135,17 @@ function serveConnect(res, {options, selected}) {
 }
 
 function serveStatic(res, pathname) {
-  const allowed = new Map([['/','index.html'], ['/index.html','index.html'], ['/app.js','app.js'], ['/style.css','style.css']]);
+  const allowed = new Map([['/','index.html'], ['/index.html','index.html'], ['/app.js','app.js'], ['/style.css','style.css'], ['/qr-scan.jpg','qr-scan.jpg']]);
   const name = allowed.get(pathname);
   if (!name) return json(res, 404, {error:'Not found'});
   try {
     const file = path.join(PUBLIC, name);
+    const ext = path.extname(name);
+    const mime = {'.html':'text/html; charset=utf-8','.css':'text/css; charset=utf-8','.js':'text/javascript; charset=utf-8','.jpg':'image/jpeg','.png':'image/png','.svg':'image/svg+xml'};
     res.writeHead(200, {
-      'Content-Type':MIME[path.extname(name)],
+      'Content-Type': mime[ext] || 'application/octet-stream',
       'Cache-Control':'no-store',
-      'Content-Security-Policy':"default-src 'self'; script-src 'self'; style-src 'self'; connect-src 'self'; object-src 'none'; frame-ancestors 'none'",
+      'Content-Security-Policy':"default-src 'self'; script-src 'self'; style-src 'self'; connect-src 'self'; img-src 'self'; object-src 'none'; frame-ancestors 'none'",
       'X-Frame-Options':'DENY', 'X-Content-Type-Options':'nosniff'
     });
     fs.createReadStream(file).pipe(res);
@@ -104,8 +159,8 @@ const server = http.createServer(async (req, res) => {
     if (req.method !== 'GET') return json(res,405,{error:'Method not allowed'});
     const parsed = new URL(req.url, `http://${req.headers.host || 'localhost'}`);
     const ip = parsed.searchParams.get('ip');
-    const {options,selected}=phoneLink(ip);
-    if (ip && !selected) return json(res,400,{error:'This is not a detected local-network address.'});
+    const {options,selected}=phoneLink(ip, req);
+    if (ip && !selected) return json(res,400,{error:'This address is not available.'});
     if (pathname==='/connect') return serveConnect(res,{options,selected});
     if (pathname==='/qr.svg') return serveQr(res,selected);
     return json(res,200,{url:selected?.url || null, options:options.map(x=>({name:x.name,url:x.url}))});
@@ -131,7 +186,6 @@ const server = http.createServer(async (req, res) => {
     } catch (err) {return json(res, 400, {error:err.message});}
     if (mode === 'web') {
       if (!extension || extension.readyState !== OPEN) return json(res, 503, {error:'Connect the Chrome extension first.'});
-      if (!targetReady) return json(res, 409, {error:'Click a textbox in Chrome first.'});
     } else {
       if (!desktop.available) return json(res, 501, {error:'Desktop keyboard mode requires Windows.'});
       if (desktop.active) return json(res, 409, {error:'Another desktop typing job is already running.'});

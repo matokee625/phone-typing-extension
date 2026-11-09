@@ -1,7 +1,7 @@
 # This file is launched for each Desktop keyboard job by server/desktop.js.
-# It simulates text entry into the active browser (Chrome/Edge/Brave).
-# It attaches to the user desktop, brings the browser to the front if needed,
-# and safely types keystrokes into the focused editor.
+# It simulates text entry into active Windows applications (WhatsApp, Google Docs/Chrome, and any Windows app).
+# It attaches to the user desktop, ensures the target window is frontmost,
+# and safely types keystrokes into the focused editor or chat input.
 $ErrorActionPreference = 'Stop'
 try {
     $requestLine = [Console]::In.ReadLine()
@@ -16,6 +16,8 @@ try {
     Add-Type -TypeDefinition @'
 using System;
 using System.Text;
+
+
 using System.Threading;
 using System.Diagnostics;
 using System.Runtime.InteropServices;
@@ -68,6 +70,8 @@ public static class DesktopTypingEngine {
     [DllImport("user32.dll", SetLastError=true)] public static extern uint SendInput(uint count, DesktopKeyboardInput[] inputs, int size);
     [DllImport("user32.dll", CharSet=CharSet.Unicode)] public static extern short VkKeyScanW(char ch);
     [DllImport("user32.dll")] public static extern void keybd_event(byte bVk, byte bScan, uint dwFlags, UIntPtr dwExtraInfo);
+    [DllImport("user32.dll")] public static extern bool AttachThreadInput(uint idAttach, uint idAttachTo, bool fAttach);
+    [DllImport("kernel32.dll")] public static extern uint GetCurrentThreadId();
 
     private const uint KEYUP = 0x0002;
     private const uint UNICODE = 0x0004;
@@ -75,24 +79,35 @@ public static class DesktopTypingEngine {
     private const byte VK_RETURN = 0x0D;
     private const uint DESKTOP_ALL = 0x01FF;
 
-    public static bool IsBrowserProcessName(string name) {
-        if (string.IsNullOrEmpty(name)) return false;
-        string n = name.ToLower();
-        return n == "chrome" || n == "msedge" || n == "brave" || n == "opera" || n == "vivaldi";
+    public static bool IsDisallowedProcess(string procName, string windowTitle) {
+        if (string.IsNullOrEmpty(procName)) return false;
+        string n = procName.ToLower();
+        if (n == "logonui" || n == "dwm" || n == "shellexperiencehost") return true;
+        if (n == "explorer" && (string.IsNullOrWhiteSpace(windowTitle) || windowTitle.Equals("Program Manager", StringComparison.OrdinalIgnoreCase) || windowTitle.Equals("Taskbar", StringComparison.OrdinalIgnoreCase))) return true;
+        if (!string.IsNullOrEmpty(windowTitle) && (windowTitle.Contains("Phone Type Remote - Host") || windowTitle.Contains("HOST-FOR-ME"))) return true;
+        return false;
     }
 
-    public static bool IsBrowserWindow(IntPtr hWnd) {
+    public static bool IsValidTargetWindow(IntPtr hWnd) {
         if (hWnd == IntPtr.Zero) return false;
+        if (!IsWindowVisible(hWnd) || IsIconic(hWnd)) return false;
         uint pid;
         GetWindowThreadProcessId(hWnd, out pid);
         if (pid == 0) return false;
         try {
-            return IsBrowserProcessName(Process.GetProcessById((int)pid).ProcessName);
+            var p = Process.GetProcessById((int)pid);
+            StringBuilder sb = new StringBuilder(256);
+            GetWindowText(hWnd, sb, 256);
+            string title = sb.ToString().Trim();
+            if (IsDisallowedProcess(p.ProcessName, title)) return false;
+            return true;
         } catch { return false; }
     }
 
-    public static IntPtr FindBrowserWindow() {
+    public static IntPtr FindBestTargetWindow() {
         IntPtr best = IntPtr.Zero;
+        int bestScore = -1;
+
         EnumWindows((hWnd, lParam) => {
             if (!IsWindowVisible(hWnd)) return true;
             uint pid;
@@ -100,21 +115,41 @@ public static class DesktopTypingEngine {
             if (pid == 0) return true;
             try {
                 var p = Process.GetProcessById((int)pid);
-                if (IsBrowserProcessName(p.ProcessName)) {
-                    StringBuilder sb = new StringBuilder(256);
-                    GetWindowText(hWnd, sb, 256);
-                    string title = sb.ToString();
-                    if (!string.IsNullOrWhiteSpace(title) && !title.Equals("Program Manager", StringComparison.OrdinalIgnoreCase)) {
-                        if (p.ProcessName.ToLower() == "chrome") {
-                            best = hWnd;
-                            return false;
-                        }
-                        if (best == IntPtr.Zero) best = hWnd;
-                    }
+                string procName = p.ProcessName.ToLower();
+                StringBuilder sb = new StringBuilder(256);
+                GetWindowText(hWnd, sb, 256);
+                string title = sb.ToString().Trim();
+
+                if (IsDisallowedProcess(procName, title)) return true;
+                if (string.IsNullOrEmpty(title)) return true;
+
+                int score = 0;
+                // High priority: WhatsApp (Desktop or Web)
+                if (procName.Contains("whatsapp") || title.ToLower().Contains("whatsapp")) {
+                    score = 100;
+                }
+                // High priority: Browsers (Google Chrome, Edge, Brave, Firefox, etc.)
+                else if (procName == "chrome" || procName == "msedge" || procName == "brave" || procName == "firefox" || procName == "opera" || procName == "vivaldi") {
+                    score = 80;
+                    if (title.ToLower().Contains("google") || title.ToLower().Contains("docs")) score += 10;
+                }
+                // Common editors & productivity: Word, Notepad, VS Code, Slack, Telegram
+                else if (procName == "notepad" || procName == "winword" || procName == "code" || procName == "telegram" || procName == "slack") {
+                    score = 60;
+                } else {
+                    score = 20;
+                }
+
+                if (IsIconic(hWnd)) score -= 10;
+
+                if (score > bestScore) {
+                    bestScore = score;
+                    best = hWnd;
                 }
             } catch {}
             return true;
         }, IntPtr.Zero);
+
         return best;
     }
 
@@ -122,23 +157,38 @@ public static class DesktopTypingEngine {
         if (hWnd == IntPtr.Zero) return false;
         if (IsIconic(hWnd)) ShowWindow(hWnd, 9);
         else ShowWindow(hWnd, 5);
-        SetForegroundWindow(hWnd);
-        BringWindowToTop(hWnd);
+
+        IntPtr fg = GetForegroundWindow();
+        uint fgPid;
+        uint fgThread = GetWindowThreadProcessId(fg, out fgPid);
+        uint currentThread = GetCurrentThreadId();
+
+        if (fgThread != 0 && fgThread != currentThread) {
+            AttachThreadInput(currentThread, fgThread, true);
+            SetForegroundWindow(hWnd);
+            BringWindowToTop(hWnd);
+            AttachThreadInput(currentThread, fgThread, false);
+        } else {
+            SetForegroundWindow(hWnd);
+            BringWindowToTop(hWnd);
+        }
         return true;
     }
 
-    public static bool BrowserHasFocus(IntPtr targetWindow) {
+    public static bool TargetHasFocus(IntPtr targetWindow, uint targetPid) {
         IntPtr fg = GetForegroundWindow();
         if (fg == IntPtr.Zero) return true;
         if (targetWindow != IntPtr.Zero && fg == targetWindow) return true;
         uint fgPid;
         GetWindowThreadProcessId(fg, out fgPid);
-        if (targetWindow != IntPtr.Zero) {
-            uint targetPid;
-            GetWindowThreadProcessId(targetWindow, out targetPid);
-            if (fgPid != 0 && targetPid != 0 && fgPid == targetPid) return true;
-        }
-        return IsBrowserWindow(fg);
+        if (fgPid != 0 && targetPid != 0 && fgPid == targetPid) return true;
+
+        try {
+            string fgName = Process.GetProcessById((int)fgPid).ProcessName.ToLower();
+            if (fgName == "textinputhost" || fgName == "applicationframehost") return true;
+        } catch {}
+
+        return false;
     }
 
     public static string GetForegroundDescription() {
@@ -149,6 +199,12 @@ public static class DesktopTypingEngine {
         if (pid == 0) return "unidentified window";
         try {
             Process p = Process.GetProcessById((int)pid);
+            StringBuilder sb = new StringBuilder(256);
+            GetWindowText(hwnd, sb, 256);
+            string title = sb.ToString().Trim();
+            if (!string.IsNullOrEmpty(title)) {
+                return p.ProcessName + " (" + title + ")";
+            }
             return p.ProcessName + ".exe";
         } catch { return "PID " + pid; }
     }
@@ -160,6 +216,16 @@ public static class DesktopTypingEngine {
         input.U.ki.wScan = scan;
         input.U.ki.dwFlags = flags;
         return input;
+    }
+
+    public static bool TypeSurrogatePair(char high, char low) {
+        DesktopKeyboardInput[] inputs = new DesktopKeyboardInput[] {
+            Keyboard(0, (ushort)high, UNICODE),
+            Keyboard(0, (ushort)high, UNICODE | KEYUP),
+            Keyboard(0, (ushort)low, UNICODE),
+            Keyboard(0, (ushort)low, UNICODE | KEYUP)
+        };
+        return SendInput(4, inputs, Marshal.SizeOf(typeof(DesktopKeyboardInput))) == 4;
     }
 
     public static bool TypeCharacter(char ch) {
@@ -226,41 +292,51 @@ public static class DesktopTypingEngine {
                 }
 
                 IntPtr window = GetForegroundWindow();
-                if (!IsBrowserWindow(window)) {
-                    IntPtr browser = FindBrowserWindow();
-                    if (browser != IntPtr.Zero) {
-                        ActivateWindow(browser);
+                if (!IsValidTargetWindow(window)) {
+                    IntPtr target = FindBestTargetWindow();
+                    if (target != IntPtr.Zero) {
+                        ActivateWindow(target);
                         Thread.Sleep(300);
                         IntPtr after = GetForegroundWindow();
-                        window = (after != IntPtr.Zero && IsBrowserWindow(after)) ? after : browser;
+                        window = (after != IntPtr.Zero && IsValidTargetWindow(after)) ? after : target;
                     }
                 }
 
                 for (int attempt = 0; attempt < 5; attempt++) {
-                    if (BrowserHasFocus(window)) break;
+                    if (IsValidTargetWindow(window)) break;
                     Thread.Sleep(200);
                     window = GetForegroundWindow();
                 }
 
-                if (!BrowserHasFocus(window)) {
+                if (!IsValidTargetWindow(window)) {
                     string desc = GetForegroundDescription();
-                    throw new Exception("Chrome/Edge window not active (detected: " + desc + "). Please open your document in Chrome and tap Start.");
+                    throw new Exception("No target window active (detected: " + desc + "). Please click into WhatsApp, Google Docs, or any Windows app and tap Start.");
                 }
 
-                int delay = (speed == "slow") ? 200 : ((speed == "fast") ? 45 : 91);
+                uint targetPid = 0;
+                GetWindowThreadProcessId(window, out targetPid);
+                ActivateWindow(window);
+                Thread.Sleep(100);
+
+                int delay = (speed == "slow") ? 180 : ((speed == "fast") ? 35 : 75);
                 Console.Out.WriteLine("STARTED");
                 Console.Out.Flush();
 
                 Random rnd = new Random();
                 for (int i = 0; i < text.Length; i++) {
-                    if (!BrowserHasFocus(window)) {
+                    if (!TargetHasFocus(window, targetPid)) {
                         Thread.Sleep(150);
-                        if (!BrowserHasFocus(window)) {
-                            throw new Exception("Browser window lost focus. Typing stopped to avoid writing into the wrong window.");
+                        if (!TargetHasFocus(window, targetPid)) {
+                            throw new Exception("Target window lost focus (" + GetForegroundDescription() + "). Typing stopped.");
                         }
                     }
 
-                    TypeCharacter(text[i]);
+                    if (char.IsHighSurrogate(text[i]) && i + 1 < text.Length && char.IsLowSurrogate(text[i + 1])) {
+                        TypeSurrogatePair(text[i], text[i + 1]);
+                        i++;
+                    } else {
+                        TypeCharacter(text[i]);
+                    }
 
                     if ((i + 1) % 20 == 0) {
                         int pct = (int)Math.Round(100.0 * (i + 1) / text.Length);
@@ -271,8 +347,8 @@ public static class DesktopTypingEngine {
                     if (i < text.Length - 1) {
                         int pause = (int)(delay * rnd.Next(75, 128) / 100.0);
                         char c = text[i];
-                        if (c == ',' || c == '.' || c == ';' || c == ':' || c == '!' || c == '?') pause += 140;
-                        if (c == '\n') pause += 170;
+                        if (c == ',' || c == '.' || c == ';' || c == ':' || c == '!' || c == '?') pause += 120;
+                        if (c == '\n') pause += 150;
                         Thread.Sleep(pause);
                     }
                 }
@@ -304,5 +380,3 @@ catch {
     [Console]::Out.Flush()
     exit 1
 }
-
-

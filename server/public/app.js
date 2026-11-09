@@ -27,21 +27,20 @@ function api(path, method = 'GET', body) {
 function updateControls() {
   const hasText = !!$('words').value.trim();
   const mode = $('mode')?.value || 'web';
-  const ready = mode === 'desktop' ? desktopAvailable : (connected && targetReady);
+  const ready = mode === 'desktop' ? desktopAvailable : connected;
   $('count').textContent = $('words').value.length + ' / 3000';
   $('start').disabled = !ready || busy || !hasText;
   $('stop').disabled = !busy || !currentJob;
   let reason;
   if (mode === 'desktop' && !desktopAvailable) reason = 'Desktop keyboard mode requires Windows. Use Web form mode on this computer.';
   else if (mode === 'web' && !connected) reason = 'Waiting for the Chrome extension to connect.';
-  else if (mode === 'web' && !targetReady) reason = 'Click an editable textbox in Chrome on your computer.';
   else if (busy) reason = 'A typing command is in progress. Press Stop to cancel it.';
   else if (!hasText) reason = 'Enter some text above to enable Start typing.';
-  else reason = mode === 'desktop' ? 'Ready: click inside the Google Docs editor, keep Chrome in front, then press Start.' : 'Ready to type into the selected textbox.';
+  else reason = mode === 'desktop' ? 'Ready: click inside WhatsApp, Google Docs, or any Windows app, then press Start.' : 'Ready to type into active textbox in Chrome.';
   const readiness = $('readiness');
   if (readiness) readiness.textContent = reason;
   const hint = $('modehint');
-  if (hint) hint.textContent = mode === 'desktop' ? 'Click inside the document or rich editor in Chrome. No textbox-selected indicator is needed. The focused Chrome window must stay in front.' : 'Click a standard textbox in Chrome; the extension detects your selection.';
+  if (hint) hint.textContent = mode === 'desktop' ? 'Click inside WhatsApp, Google Docs, or any Windows app. Keep the window in front, then tap Start.' : 'Click a standard textbox in Chrome; the extension types directly into it.';
 }
 function showRemote() { $('loginBox').classList.add('hidden');$('controller').classList.remove('hidden');updateControls(); }
 function showLogin() {$('loginBox').classList.remove('hidden');$('controller').classList.add('hidden');$('code').value=code;}
@@ -60,9 +59,9 @@ async function refresh() {
     targetReady = connected && st.targetReady === true;
     desktopAvailable = st.desktopAvailable === true;
     const desktopMode = $('mode')?.value === 'desktop';
-    $('status').textContent = desktopMode ? (desktopAvailable ? 'Windows keyboard mode available' : 'Windows keyboard mode unavailable') : (connected ? 'Chrome extension connected' : 'Chrome extension disconnected');
+    $('status').textContent = desktopMode ? (desktopAvailable ? 'Windows keyboard mode available' : 'Windows keyboard mode unavailable') : (connected ? 'Web form mode available' : 'Chrome extension disconnected');
     $('dot').classList.toggle('green', desktopMode ? desktopAvailable : connected);
-    $('target').textContent = ($('mode')?.value === 'desktop') ? (desktopAvailable ? 'Windows keyboard ready — focus an editor in Chrome.' : 'Windows keyboard mode unavailable on this computer.') : (targetReady ? '✓ Textbox selected in Chrome' : 'Click a textbox in Chrome on your computer.');
+    $('target').textContent = ($('mode')?.value === 'desktop') ? (desktopAvailable ? '✓ Windows keyboard ready — focus WhatsApp, Google Docs, or any app.' : 'Windows keyboard mode unavailable on this computer.') : (targetReady ? '✓ Textbox selected in Chrome' : (connected ? '✓ Web form mode ready — focus a textbox in Chrome' : 'Connect Chrome extension'));
     updateControls();
     if (currentJob) {
       let job;
@@ -109,14 +108,14 @@ $('unpair').addEventListener('click', () => {
 $('words').addEventListener('input', updateControls);
 $('mode')?.addEventListener('change', () => {
   if ($('mode').value === 'desktop') $('target').textContent = desktopAvailable ? 'Windows keyboard ready — focus an editor in Chrome.' : 'Windows keyboard mode unavailable on this computer.';
-  else $('target').textContent = targetReady ? '✓ Textbox selected in Chrome' : 'Click a textbox in Chrome on your computer.';
-  $('status').textContent = $('mode').value === 'desktop' ? (desktopAvailable ? 'Windows keyboard mode available' : 'Windows keyboard mode unavailable') : (connected ? 'Chrome extension connected' : 'Chrome extension disconnected');
+  else $('target').textContent = connected ? '✓ Web form mode ready — focus a textbox in Chrome' : 'Connect Chrome extension';
+  $('status').textContent = $('mode').value === 'desktop' ? (desktopAvailable ? 'Windows keyboard mode available' : 'Windows keyboard mode unavailable') : (connected ? 'Web form mode available' : 'Chrome extension disconnected');
   $('dot').classList.toggle('green', $('mode').value === 'desktop' ? desktopAvailable : connected);
   updateControls();
 });
 $('start').addEventListener('click', async () => {
   const mode = $('mode')?.value || 'web';
-  if (busy || !(mode === 'desktop' ? desktopAvailable : connected && targetReady) || !$('words').value.trim()) {updateControls();return;}
+  if (busy || !(mode === 'desktop' ? desktopAvailable : connected) || !$('words').value.trim()) {updateControls();return;}
   busy=true;currentJob=null;updateControls();
   try {
     const res = await api('/api/start', 'POST', {text:$('words').value, speed:$('speed').value, mode});
@@ -137,7 +136,27 @@ async function syncQrInfo() {
     const res = await fetch('/phone-link.json', {cache:'no-store'});
     if (!res.ok) return;
     const data = await res.json();
-    if (data.url && $('loginQrUrl')) $('loginQrUrl').textContent = data.url;
+    const url = data.url || null;
+    // Force-load the QR images with a fresh timestamp
+    const now = Date.now();
+    const img = $('loginQrImg');
+    if (img) img.src = '/qr.svg?t=' + now;
+    const ctrlImg = $('ctrlQrImg');
+    if (ctrlImg) ctrlImg.src = '/qr.svg?t=' + now;
+    // Set URL text labels
+    if (url && $('loginQrUrl')) $('loginQrUrl').textContent = url;
+    if (url && $('ctrlQrUrl'))  $('ctrlQrUrl').textContent  = url;
+    // Auto-pair if code embedded in URL (for QR scan flow)
+    if (!code && url) {
+      const match = url.match(/code=(\d{8})/);
+      if (match) {
+        code = match[1];
+        sessionStorage.setItem('phone-typing-code', code);
+        showRemote();
+        refresh();
+      }
+    }
   } catch {}
 }
 syncQrInfo();
+

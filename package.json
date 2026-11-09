@@ -9,5 +9,8 @@
   },
   "engines": {
     "node": ">=22"
+  },
+  "dependencies": {
+    "qrcode": "^1.5.4"
   }
 }

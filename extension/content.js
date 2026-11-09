@@ -98,9 +98,11 @@
       respond({accepted:true});return;
     }
     if (msg?.type !== 'TYPE_TEXT') return;
-    if (running) {respond({accepted:false,error:'Typing is already in progress.'});return;}
-    if (!selected || !selected.isConnected) {respond({accepted:false,error:'Click a textbox again.'});return;}
-    try {PhoneTypingUtils.validateRequest(msg);} catch(err) {respond({accepted:false,error:err.message});return;}
+    if (!selected || !selected.isConnected) {
+      const fallback = editableFrom(document.activeElement);
+      if (fallback) selected = fallback;
+      else {respond({accepted:false,error:'Click a textbox again.'});return;}
+    }
     const job = {id:msg.id,abort:new AbortController()};
     running = job;
     respond({accepted:true});

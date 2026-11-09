@@ -1,11 +1,11 @@
-# Phone Type Remote — Chrome forms + Windows Google Docs keyboard mode
+# Phone Type Remote — WhatsApp, Google Docs & Windows Universal Keyboard
 
-This project is an improved version of the phone-controlled Chrome typing extension. **New:** open `http://localhost:8765/connect` on the computer for a scannable QR code, or scan the QR from the updated Chrome extension popup. The phone then opens the controller on the same Wi-Fi. Pairing still requires the terminal’s 8-digit code.
+This project lets you type text from your phone directly into your computer. **New:** Now supports **WhatsApp** (WhatsApp Desktop and WhatsApp Web), **Google** (Google Docs, Google Search, Chrome), and **any Windows application** (Notepad, Word, Office, etc.), as well as standard Chrome web form textboxes.
 
 It supports two typing methods:
 
-- **Web form**: The original Chrome content script enters text into ordinary `input`, `textarea`, and many `contenteditable` elements. This mode requires the extension to show a textbox selected in Chrome.
-- **Desktop keyboard (Windows)**: A short-lived Windows PowerShell process sends OS-level simulated keystrokes to the **foreground Google Chrome window**. This mode does *not* depend on the extension detecting a textbox. It is intended for Google Docs and rich editors, where direct DOM editing often fails. Google Docs/browser compatibility is best-effort: some editors may ignore or transform simulated input.
+- **Desktop keyboard (Windows)**: Sends OS-level keystrokes to your active window. Works seamlessly with **WhatsApp Desktop**, **Google Docs**, **Google Chrome**, **Microsoft Word**, **Notepad**, and any other Windows app. Also includes native emoji surrogate-pair support and automatic window activation.
+- **Web form**: The original Chrome extension content script that enters text directly into standard DOM `input`, `textarea`, and editable elements.
 
 ## Requirements
 

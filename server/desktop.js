@@ -33,7 +33,7 @@ class DesktopRunner {
     };
     const handleLine = line => {
       if (job.closed) return;
-      if (line==='STARTED') update('started','Typing into the focused Chrome editor…',0);
+      if (line==='STARTED') update('started','Typing into active window (WhatsApp / Google / Windows)…',0);
       else if (/^PROGRESS:\d{1,3}$/.test(line)) {
         update('started','Typing…',Math.min(100,Number(line.slice('PROGRESS:'.length))));
       } else if (line==='DONE') complete('done','Finished typing.',100);

@@ -141,10 +141,22 @@ function createQrMatrix(text) {
   }
   return best;
 }
-function createQrSvg(url) {
-  const matrix=createQrMatrix(url);
-  const boxes=[];
-  for(let y=0;y<SIZE;y++) for(let x=0;x<SIZE;x++) if(matrix[y][x]) boxes.push(`M${x+4},${y+4}h1v1h-1z`);
+let QRCode;
+try { QRCode = require('qrcode'); } catch {}
+
+async function createQrSvg(url) {
+  if (QRCode) {
+    return await QRCode.toString(url, {
+      type: 'svg',
+      margin: 1,
+      errorCorrectionLevel: 'M',
+      color: { dark: '#101827', light: '#ffffff' }
+    });
+  }
+  const matrix = createQrMatrix(url);
+  const boxes = [];
+  for(let y=0; y<SIZE; y++) for(let x=0; x<SIZE; x++) if(matrix[y][x]) boxes.push(`M${x+4},${y+4}h1v1h-1z`);
   return `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 37 37" width="296" height="296" role="img" aria-label="Scan to open the phone typing controller"><rect width="37" height="37" fill="#fff"/><path d="${boxes.join('')}" fill="#101827"/></svg>`;
 }
-module.exports={createQrMatrix,createQrSvg};
+
+module.exports = {createQrMatrix, createQrSvg};

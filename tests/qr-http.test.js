@@ -24,7 +24,7 @@ async function ready(child) {
 }
 test('scan page and QR endpoint expose the same LAN URL, without exposing pairing code',async()=>{
   const port=await reservePort();
-  const child=spawn(process.execPath,['server/server.js'],{cwd:path.join(__dirname,'..'),env:{...process.env,PORT:String(port)},stdio:['ignore','pipe','pipe']});
+  const child=spawn(process.execPath,['server/server.js'],{cwd:path.join(__dirname,'..'),env:{...process.env,PORT:String(port),NODE_ENV:'test'},stdio:['ignore','pipe','pipe']});
   try {
     await ready(child);
     const base=`http://127.0.0.1:${port}`;
@@ -44,7 +44,7 @@ test('scan page and QR endpoint expose the same LAN URL, without exposing pairin
       assert.equal(qrRes.status,200);
       assert.match(qrRes.headers.get('content-type'),/image\/svg\+xml/);
       const svg=await qrRes.text();
-      assert.match(svg,/viewBox="0 0 37 37"/);
+      assert.match(svg,/viewBox="0 0 \d+ \d+"/);
       assert.doesNotMatch(svg,/\d{8}.*pairing/i);
     }
     assert.equal((await fetch(base+'/qr.svg?ip=127.0.0.1')).status,400);

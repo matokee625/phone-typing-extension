@@ -1,0 +1,12 @@
+node_modules/
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+
+# Ephemeral runtime files
+server/code.txt
+server/tunnel-url.txt
+*.log
+server/*.log
+.DS_Store
+Thumbs.db
