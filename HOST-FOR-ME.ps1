@@ -62,10 +62,10 @@ Write-Host "`n[3/3] Ready! Host Information:" -ForegroundColor Cyan
 Write-Host "----------------------------------------------------------"
 Write-Host "  PAIRING CODE:  $pairingCode" -ForegroundColor Yellow
 Write-Host "  PUBLIC URL:    $publicUrl/?code=$pairingCode" -ForegroundColor Green
-Write-Host "  LOCAL PC:      http://localhost:8765/connect" -ForegroundColor Gray
+Write-Host "  LOCAL PC:      http://localhost:8765/" -ForegroundColor Gray
 Write-Host "----------------------------------------------------------"
-Write-Host "`nOpening http://localhost:8765/connect in your browser..." -ForegroundColor Yellow
-Start-Process "http://localhost:8765/connect"
+Write-Host "`nOpening http://localhost:8765/ in your browser..." -ForegroundColor Yellow
+Start-Process "http://localhost:8765/"
 
 Write-Host "`nKeep this script open to keep your hosting active. Press Ctrl+C when done." -ForegroundColor Cyan
 while ($true) { Start-Sleep -Seconds 30 }
