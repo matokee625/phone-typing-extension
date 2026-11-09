@@ -3,130 +3,59 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1">
-<meta http-equiv="Cache-Control" content="no-cache, no-store, must-revalidate">
-<meta http-equiv="Pragma" content="no-cache">
-<meta http-equiv="Expires" content="0">
 <title>Phone Type Remote</title>
-<link rel="stylesheet" href="/style.css?v=20261028b">
+<link rel="stylesheet" href="/style.css">
 </head>
-<body><main>
-<div class="tag">PRIVATE WI-FI &middot; UNIVERSAL WINDOWS &amp; WEB MODE</div>
+<body>
+<main>
+<div class="tag">PRIVATE WI-FI · UNIVERSAL WINDOWS &amp; WEB</div>
 <h1>Phone Type <span>Remote</span></h1>
-<p class="intro">Send text from your phone into WhatsApp, Google Docs, Chrome, and any Windows app.</p>
+<p class="intro">Type into WhatsApp, Google Docs, Chrome, and any Windows app from your phone.</p>
 
 <section id="loginBox" class="card">
-  <h2>Connect your phone</h2>
-
-  <!-- Option 1: Scan QR -->
-  <div class="option-block">
-    <div class="option-label">
-      <span class="option-num">1</span>
-      <span>Scan the QR code with your phone camera</span>
-    </div>
-    <div class="qr-illustration-wrap">
-      <img src="/qr-scan.jpg" alt="Phone scanning a QR code" class="qr-illustration">
-    </div>
-    <div class="qr-wrap">
-      <img id="loginQrImg" src="/qr.svg?t=0" width="240" height="240"
-           alt="QR code — scan to open Phone Type Remote on your phone"
-           onerror="this.style.display='none';document.getElementById('qrErr').style.display='block'">
-      <p id="qrErr" class="qr-error" style="display:none">
-        QR unavailable. Use the code below instead.
-      </p>
-    </div>
-    <p class="scan-url" id="loginQrUrl">Loading&hellip;</p>
-    <p class="qr-subtext">Works from anywhere on any phone (cellular data or Wi-Fi). Scanning opens this page automatically &mdash; no code entry needed.</p>
-  </div>
-
-  <!-- Divider -->
-  <div class="or-divider"><span>OR</span></div>
-
-  <!-- Option 2: Enter code -->
-  <div class="option-block">
-    <div class="option-label">
-      <span class="option-num">2</span>
-      <span>Type the 8-digit code from your computer&apos;s terminal</span>
-    </div>
-    <label for="code" class="sr-only">Pairing code</label>
-    <input id="code" type="text" inputmode="numeric" pattern="[0-9]*"
-           maxlength="8" autocomplete="off" placeholder="12345678">
-    <button id="pair">Connect phone</button>
-  </div>
+  <h2>Pair your phone</h2>
+  <p>Enter the 8-digit code shown on your computer screen.</p>
+  <label for="code">Pairing code</label>
+  <input id="code" type="text" inputmode="numeric" pattern="[0-9]*" maxlength="8" autocomplete="off" placeholder="12345678">
+  <button id="pair">Connect phone</button>
 </section>
 
 <section id="controller" class="card hidden">
   <div class="status">
     <span class="dot" id="dot"></span>
-    <span id="status">Connecting&hellip;</span>
+    <span id="status">Connecting…</span>
     <button id="unpair" class="small secondary">Change code</button>
   </div>
-  <p id="target" class="hint">Click a textbox in Chrome on your computer.</p>
+  <p id="target" class="hint">Click inside WhatsApp, Google Docs, or any Windows app.</p>
 
   <label for="mode">Typing method</label>
   <select id="mode">
-    <option value="desktop" selected>Desktop keyboard &mdash; WhatsApp, Google Docs &amp; any Windows app</option>
-    <option value="web">Web form &mdash; standard textbox in Chrome</option>
+    <option value="desktop" selected>Desktop keyboard — WhatsApp, Google Docs &amp; any Windows app</option>
+    <option value="web">Web form — standard textbox in Chrome</option>
   </select>
-  <p id="modehint" class="modehint">Click a standard textbox in Chrome; the extension detects your selection.</p>
+  <p id="modehint" class="modehint">Click inside WhatsApp, Google Docs, or any Windows app. Keep the window in front, then tap Start.</p>
+
   <label for="words">Text to type</label>
-  <textarea id="words" rows="8" maxlength="3000" placeholder="Write or paste your text here&hellip;"></textarea>
+  <textarea id="words" rows="8" maxlength="3000" placeholder="Write or paste your text here…"></textarea>
   <div class="count" id="count">0 / 3000</div>
+
   <label for="speed">Typing speed</label>
   <select id="speed">
     <option value="slow">Slow (~5 characters/sec)</option>
     <option value="normal" selected>Normal (~11 characters/sec)</option>
     <option value="fast">Fast (~22 characters/sec)</option>
   </select>
+
   <div class="buttons">
-    <button id="start" disabled>Start typing &rarr;</button>
+    <button id="start" disabled>Start typing →</button>
     <button id="stop" class="secondary" disabled>Stop</button>
   </div>
-  <p id="readiness" class="readiness" aria-live="polite">Checking connection&hellip;</p>
+  <p id="readiness" class="readiness" aria-live="polite">Checking connection…</p>
   <p id="result" class="result" aria-live="polite"></p>
-
-  <!-- QR share panel — bottom of controller, visible by default -->
-  <div class="qr-toggle-bar">
-    <button class="qr-toggle-btn" id="qrToggleBtn" onclick="toggleQrPanel()"
-            aria-expanded="true" aria-controls="ctrlQrPanel">
-      Hide QR Code
-    </button>
-  </div>
-  <div id="ctrlQrPanel" class="ctrl-qr-panel">
-    <div class="option-label" style="justify-content:center;margin-bottom:10px">
-      <span class="option-num" style="width:20px;height:20px;font-size:.7rem">&#x25A3;</span>
-      <span>Public QR &mdash; Scan with any phone to connect</span>
-    </div>
-    <div class="qr-illustration-wrap">
-      <img src="/qr-scan.jpg" alt="Phone scanning a QR code" class="qr-illustration">
-    </div>
-    <div class="qr-wrap">
-      <img id="ctrlQrImg" src="/qr.svg" width="240" height="240" alt="QR code"
-           onerror="this.style.display='none'">
-    </div>
-    <p class="scan-url" id="ctrlQrUrl"></p>
-    <p class="qr-subtext">Scan with any phone camera from anywhere in the world to open this typing controller.</p>
-  </div>
-
 </section>
 
-<p class="footer">For Chrome only. In desktop keyboard mode,
-click the exact editor first and do not change tabs while typing. Never use with passwords,
-payment fields or sensitive information.</p>
+<p class="footer">Works with WhatsApp, Google Docs, and all Windows apps over your private Wi-Fi or secure tunnel.</p>
 </main>
-
-<script>
-function toggleQrPanel() {
-  var panel = document.getElementById('ctrlQrPanel');
-  var btn   = document.getElementById('qrToggleBtn');
-  var isHidden = panel.classList.toggle('hidden');
-  btn.setAttribute('aria-expanded', String(!isHidden));
-  btn.textContent = isHidden ? 'Show QR \u2014 share controller' : 'Hide QR Code';
-  if (!isHidden) {
-    var img = document.getElementById('ctrlQrImg');
-    if (img) img.src = '/qr.svg?t=' + Date.now();
-  }
-}
-</script>
-<script src="/app.js?v=20261028b"></script>
+<script src="/app.js"></script>
 </body>
 </html>
