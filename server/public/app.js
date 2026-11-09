@@ -1,15 +1,21 @@
 'use strict';
 const $ = id => document.getElementById(id);
 let code = sessionStorage.getItem('phone-typing-code') || '';
+let serverBase = sessionStorage.getItem('phone-typing-server') || '';
 try {
   const urlParams = new URLSearchParams(window.location.search);
   const incoming = urlParams.get('code') || urlParams.get('c');
   if (incoming && /^\d{8}$/.test(incoming)) {
     code = incoming;
     sessionStorage.setItem('phone-typing-code', code);
-    if (window.history && window.history.replaceState) {
-      window.history.replaceState({}, document.title, window.location.pathname);
-    }
+  }
+  const s = urlParams.get('server') || urlParams.get('s');
+  if (s && /^https?:\/\//i.test(s)) {
+    serverBase = s.replace(/\/+$/, '');
+    sessionStorage.setItem('phone-typing-server', serverBase);
+  }
+  if (window.history && window.history.replaceState) {
+    window.history.replaceState({}, document.title, window.location.pathname);
   }
 } catch {}
 let currentJob = null;
@@ -21,7 +27,8 @@ let refreshing = false;
 const doneStates = ['done','error','stopped'];
 
 function api(path, method = 'GET', body) {
-  return fetch(path, {method, cache:'no-store', headers:{'X-Pairing-Code':code, ...(body ? {'Content-Type':'application/json'} : {})},body:body ? JSON.stringify(body) : undefined})
+  const targetUrl = (serverBase ? serverBase : '') + path;
+  return fetch(targetUrl, {method, cache:'no-store', headers:{'X-Pairing-Code':code, ...(body ? {'Content-Type':'application/json'} : {})},body:body ? JSON.stringify(body) : undefined})
     .then(async r => {const data = await r.json();if (!r.ok) throw new Error(data.error || 'Request failed');return data;});
 }
 function updateControls() {
